@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="ja">
 <head>
@@ -10,8 +11,8 @@
       --page-h: 297mm;
       --card-w: 63mm;
       --card-h: 88mm;
-      --page-padding-x: 6mm;
-      --page-padding-y: 6mm;
+      --cut-line-color: rgba(17, 24, 39, 0.42);
+      --cut-line-width: 0.15mm;
       --screen-bg: #e5e7eb;
       --panel-bg: #ffffff;
       --text: #111827;
@@ -139,19 +140,19 @@
       width: var(--page-w);
       height: var(--page-h);
       margin: 0 auto 16px;
-      padding: var(--page-padding-y) var(--page-padding-x);
+      padding: 0;
       background: #fff;
       display: grid;
       grid-template-columns: repeat(3, var(--card-w));
       grid-auto-rows: var(--card-h);
       justify-content: center;
       align-content: center;
-      gap: calc((var(--page-h) - (var(--page-padding-y) * 2) - (var(--card-h) * 3)) / 2)
-           calc((var(--page-w) - (var(--page-padding-x) * 2) - (var(--card-w) * 3)) / 2);
+      gap: 0;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
       overflow: hidden;
       page-break-after: always;
       break-after: page;
+      position: relative;
     }
 
     .slot {
@@ -159,7 +160,37 @@
       height: var(--card-h);
       overflow: hidden;
       background: #f9fafb;
-      border: 0.2mm solid transparent;
+      border: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .cut-guides {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .cut-line {
+      position: absolute;
+      pointer-events: none;
+    }
+
+    .cut-line.v {
+      top: 0;
+      bottom: 0;
+      width: 0;
+      border-left: var(--cut-line-width) solid var(--cut-line-color);
+      transform: translateX(calc(var(--cut-line-width) / -2));
+    }
+
+    .cut-line.h {
+      left: 0;
+      right: 0;
+      height: 0;
+      border-top: var(--cut-line-width) solid var(--cut-line-color);
+      transform: translateY(calc(var(--cut-line-width) / -2));
     }
 
     .slot img {
@@ -212,7 +243,7 @@
         width: 210mm;
         height: 297mm;
         margin: 0 !important;
-        padding: var(--page-padding-y) var(--page-padding-x);
+        padding: 0;
         box-shadow: none !important;
         page-break-after: always;
         break-after: page;
@@ -230,8 +261,8 @@
     <div class="toolbar-inner">
       <h1>プロキシカード A4 レイアウト</h1>
       <p class="lead">
-        カード画像URLをA4に63mm×88mmで配置します。1ページ9枚、40枚なら5ページです。
-        iPhoneでは「印刷」からPDFとして保存し、netprintへアップロードしてください。
+        カード画像URLをA4に63mm×88mmで配置します。カード間の隙間は0mmです。
+        1ページ9枚、40枚なら5ページです。iPhoneでは「印刷」からPDFとして保存し、netprintへアップロードしてください。
       </p>
 
       <textarea id="urlInput" placeholder="カード画像URLを1行に1つずつ貼り付けます。&#10;ショートカットから ?urls=... で渡された場合は自動入力されます。"></textarea>
@@ -251,7 +282,7 @@
     <strong>使い方：</strong>
     画像URLを入れて「A4レイアウト生成」→「印刷 / PDF保存」。
     iPhoneでは印刷プレビューから共有して「ファイルに保存」できます。
-    netprintに登録するときは、可能なら用紙サイズA4・拡大縮小なしにしてください。
+    カード間の隙間は0mm、薄い補助線はカット位置です。netprintに登録するときは、可能なら用紙サイズA4・拡大縮小なしにしてください。
   </aside>
 
   <main id="printArea" aria-label="A4印刷レイアウト"></main>
@@ -362,6 +393,37 @@
         return decoded;
       }
 
+      function addCutGuides(page) {
+        const guides = document.createElement('div');
+        guides.className = 'cut-guides';
+
+        const gridLeft = (210 - CARD_W_MM * 3) / 2;
+        const gridTop = (297 - CARD_H_MM * 3) / 2;
+
+        function makeLine(className, positionMm) {
+          const line = document.createElement('span');
+          line.className = 'cut-line ' + className;
+
+          if (className === 'v') {
+            line.style.left = positionMm + 'mm';
+          } else {
+            line.style.top = positionMm + 'mm';
+          }
+
+          guides.appendChild(line);
+        }
+
+        for (let i = 0; i <= 3; i++) {
+          makeLine('v', gridLeft + CARD_W_MM * i);
+        }
+
+        for (let i = 0; i <= 3; i++) {
+          makeLine('h', gridTop + CARD_H_MM * i);
+        }
+
+        page.appendChild(guides);
+      }
+
       function renderPages(urls) {
         printArea.innerHTML = '';
 
@@ -397,13 +459,14 @@
             page.appendChild(slot);
           });
 
+          addCutGuides(page);
           printArea.appendChild(page);
         }
 
         setStatus(
           `${urls.length}枚を配置しました。\n` +
-          `カードサイズ: ${CARD_W_MM}mm × ${CARD_H_MM}mm\n` +
-          `A4ページ数: ${pageCount}ページ\n` +
+          `カードサイズ: ${CARD_W_MM}mm × ${CARD_H_MM}mm / カード間隔: 0mm\n` +
+          `A4ページ数: ${pageCount}ページ / 薄い線: カット補助線\n` +
           '画像がすべて表示されたら「印刷 / PDF保存」を押してください。'
         );
       }
